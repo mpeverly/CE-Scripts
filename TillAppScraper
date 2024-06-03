@@ -1,0 +1,54 @@
+import os
+import pdfplumber
+import pandas as pd
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+def extract_text_from_pdf(pdf_path):
+    """
+    Extract all text from a PDF file.
+    """
+    extracted_text = ""
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            for page in pdf.pages:
+                text = page.extract_text()
+                if text:
+                    extracted_text += text + "\n"
+    except Exception as e:
+        logging.error(f"Error processing {pdf_path}: {e}")
+    return extracted_text.strip()
+
+def compile_texts_to_excel(folder_path, output_excel_path):
+    data = []
+    pdf_files = [os.path.join(folder_path, f) for f in os.listdir(folder_path) if f.endswith('.pdf')]
+
+    # Process PDFs in parallel
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        future_to_pdf = {executor.submit(extract_text_from_pdf, pdf_path): pdf_path for pdf_path in pdf_files}
+        for future in as_completed(future_to_pdf):
+            pdf_path = future_to_pdf[future]
+            try:
+                text = future.result()
+                filename = os.path.basename(pdf_path)
+                data.append({'filename': filename, 'content': text})
+                logging.info(f"Processed {filename}")
+            except Exception as e:
+                logging.error(f"Error processing {pdf_path}: {e}")
+
+    # Convert data to a DataFrame
+    df = pd.DataFrame(data)
+    
+    # Save DataFrame to Excel
+    df.to_excel(output_excel_path, index=False)
+    logging.info(f"Data saved to {output_excel_path}")
+
+# Specify the folder containing PDFs and the output Excel file path
+pdf_folder = r'C:\Users\mpeverly\Desktop\CE Infinicept applications'
+output_excel = r'C:\Users\mpeverly\Desktop\Pricing\output.xlsx'
+
+# Compile the text into an Excel file
+compile_texts_to_excel(pdf_folder, output_excel)
